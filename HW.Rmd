@@ -1,0 +1,95 @@
+---
+title: "Automatize_HW"
+author: "Ekaterina Fokina"
+date: "2022-11-07"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(flextable)
+library(gtsummary)
+```
+
+# Загрузим данные и посмотрим на них
+
+```{r, include=FALSE}
+my_data <- read_excel("data_excel.xlsx")
+summary(my_data)
+my_data[my_data == "NA"] <- NA
+```
+
+# Описательные статистики для количественных переменных
+
+
+```{r echo=FALSE}
+statistics_numeric <- list(
+  `_Количество субъектов` = ~length(.x) %>% as.character(),
+  `_Есть данные` = ~sum(!is.na(.x)) %>% as.character(),
+  `_Нет данных` = ~sum(is.na(.x)) %>% as.character(),
+  `_Среднее значение` = ~ifelse(sum(!is.na(.x)) == 0, "н/п", mean(.x, na.rm = TRUE) %>% round(2) %>% as.character()),
+  `_Стандартное отклонение` = ~ifelse(sum(!is.na(.x)) == 0, "н/п", sd(.x, na.rm = TRUE) %>% round(2) %>% as.character()),
+  `_Медиана`= ~ifelse(sum(!is.na(.x)) == 0, "н/п", median(.x, na.rm = TRUE) %>% round(2) %>% as.character()),
+  `_Размах` = ~ifelse(sum(!is.na(.x)) == 0, "н/п", (max(.x, na.rm = TRUE) - min(.x, na.rm = TRUE)) %>% round(2)) %>% as.character()
+)
+
+my_data %>%
+  select(`Группа`, where(is.numeric)) %>%
+  group_by(`Группа`) %>%
+  summarise(across(where(is.numeric), statistics_numeric)) %>%
+  pivot_longer(!`Группа`) %>%
+  separate(name, into = c("Переменная", "Статистика"), sep = "__") %>%
+  rename(`Значение` = value) %>%
+  flextable() %>%
+  theme_vanilla() %>%
+  merge_v(c("Группа", "Переменная")) %>%
+  bold(j = "Группа") %>%
+  italic(j = "Переменная") %>%
+  set_table_properties(layout = "autofit")
+  
+```
+
+# Описательные статистики для категориальных переменных
+
+```{r echo=FALSE}
+my_data %>%
+  select(`Группа`, where(is.character)) %>%
+  mutate(`Группа крови` = `Группа крови` %>% replace_na("Нет данных") %>% as.factor()) %>%
+  count(`Группа`, `Группа крови`) %>%
+  group_by(`Группа`) %>%
+  mutate(`Процент по группе` = (n / sum(n)) %>% round(4) %>% `*`(100) %>% str_c("%")) %>%
+  ungroup() %>%
+  mutate(`Процент по выборке` = (n / sum(n)) %>% round(4) %>% `*`(100) %>% str_c("%")) %>%
+  flextable() %>%
+  theme_vanilla() %>%
+  merge_v("Группа") %>%
+  bold(j = "Группа") %>%
+  italic(j = "Группа крови") %>%
+  set_table_properties(layout = "autofit")
+  
+```
+
+# Таблица со сравнением групп
+
+```{r echo=FALSE}
+p_value_sign <- function(x) {
+  x < 0.05
+}
+
+my_data %>%
+  tbl_summary(by = "Группа") %>% 
+  bold_labels() %>%
+  italicize_levels() %>%
+  add_p() %>%
+  as_flex_table() %>%
+  color(i = ~p_value_sign(p.value), j = "p.value", color = "red") %>%
+  set_table_properties(layout = "autofit")
+```
+
